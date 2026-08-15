@@ -68,7 +68,6 @@ def classify_incident(description: str, incident_type: str) -> dict:
         config=types.GenerateContentConfig(
             max_output_tokens=1024,
             temperature=0.2,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
             response_mime_type="application/json",
             response_schema=AgentResponse,
         ),

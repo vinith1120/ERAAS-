@@ -183,36 +183,45 @@ async def trigger_sos_broadcast(body: SOSRequest):
     """
     incident = generate_incident()
     
-    # Customize based on payload
-    em_type = body.type.lower()
-    if em_type == 'fire':
-        incident.description = "MASSIVE FIRE REPORTED VIA CIVILIAN PORTAL"
-        incident.incident_type = "fire"
-        incident.severity = "Critical"
-    elif em_type == 'accident':
-        incident.description = "SEVERE MULTI-VEHICLE ACCIDENT REPORTED"
-        incident.incident_type = "road accident"
-        incident.severity = "High"
-    elif em_type == 'medical':
-        incident.description = "URGENT MEDICAL EMERGENCY (CARDIAC ARREST)"
-        incident.incident_type = "medical emergency"
-        incident.severity = "Critical"
-    else:
-        incident.severity = "Critical"
-        incident.description = "URGENT SOS PANIC SIGNAL RECEIVED"
-        incident.incident_type = "sos_panic"
+    db = SessionLocal()
+    try:
+        db_incident = db.query(Incident).get(incident.id)
         
-    # Override location if provided by the civilian's phone GPS
-    if body.lat is not None and body.lon is not None:
-        incident.latitude = body.lat
-        incident.longitude = body.lon
-    
-    # Broadcast to all connected clients instantly
-    await manager.broadcast_json({
-        "type": "SOS_TRIGGER", 
-        "incident": _incident_to_dict(incident),
-        "emergency_type": em_type
-    })
+        # Customize based on payload
+        em_type = body.type.lower()
+        if em_type == 'fire':
+            db_incident.description = "MASSIVE FIRE REPORTED VIA CIVILIAN PORTAL"
+            db_incident.incident_type = "fire"
+            db_incident.severity = "Critical"
+        elif em_type == 'accident':
+            db_incident.description = "SEVERE MULTI-VEHICLE ACCIDENT REPORTED"
+            db_incident.incident_type = "road accident"
+            db_incident.severity = "High"
+        elif em_type == 'medical':
+            db_incident.description = "URGENT MEDICAL EMERGENCY (CARDIAC ARREST)"
+            db_incident.incident_type = "medical emergency"
+            db_incident.severity = "Critical"
+        else:
+            db_incident.severity = "Critical"
+            db_incident.description = "URGENT SOS PANIC SIGNAL RECEIVED"
+            db_incident.incident_type = "sos_panic"
+            
+        # Override location if provided by the civilian's phone GPS
+        if body.lat is not None and body.lon is not None:
+            db_incident.latitude = body.lat
+            db_incident.longitude = body.lon
+            
+        db.commit()
+        db.refresh(db_incident)
+        
+        # Broadcast to all connected clients instantly
+        await manager.broadcast_json({
+            "type": "SOS_TRIGGER", 
+            "incident": _incident_to_dict(db_incident),
+            "emergency_type": em_type
+        })
+    finally:
+        db.close()
     
     return {"ok": True}
 

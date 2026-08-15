@@ -871,7 +871,14 @@
               if (prev.soundEnabled && (inc.severity === 'Critical' || inc.severity === 'High')) beep();
             }
           });
-          return { ...prev, incidents: incoming };
+          
+          let nextSelected = prev.selectedIncident;
+          if (nextSelected) {
+            const updated = incoming.find(i => i.id === nextSelected.id);
+            if (updated) nextSelected = updated;
+          }
+          
+          return { ...prev, incidents: incoming, selectedIncident: nextSelected };
         });
       }, [pushToast]);
 
@@ -1010,7 +1017,10 @@
               try {
                 const res = await fetch(`/incidents/${id}/override`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Bypass-Tunnel-Reminder': 'true' 
+                  },
                   body: JSON.stringify({ new_status: newStatus, dispatcher_name: "duty_dispatcher", note: reason || '' })
                 });
                 if (res.ok) {
@@ -1048,7 +1058,10 @@
               try {
                 await fetch("/sos/trigger", { 
                   method: "POST", 
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Bypass-Tunnel-Reminder': 'true'
+                  },
                   body: JSON.stringify({ type: emType, lat, lon })
                 });
               } catch (e) {
@@ -1807,7 +1820,7 @@
 
       return (
         <article
-          className={`card relative overflow-hidden transition-all duration-200 animate-in stagger-${(index % 4) + 1} ${isSelected ? 'ring-1 ring-rose-500 border-white/10' : 'border-white/5'} ${isNew ? 'bg-rose-500/5' : ''} ${isKanban ? 'cursor-grab bg-slate-900/60 p-3' : 'cursor-pointer'}`}
+          className={`card ${incident.severity || 'Unclassified'} relative overflow-hidden transition-all duration-200 animate-in stagger-${(index % 4) + 1} ${isSelected ? 'ring-1 ring-rose-500 border-white/10' : 'border-white/5'} ${isNew ? 'bg-rose-500/5' : ''} ${isKanban ? 'cursor-grab bg-slate-900/60 p-3' : 'cursor-pointer'}`}
           data-incident-id={incident.id}
           onClick={isKanban ? undefined : handleClick}
           onDoubleClick={isKanban ? handleClick : undefined}
@@ -2032,7 +2045,29 @@
       });
       const handleSOS = (type) => {
         setGettingLocation(true);
-        if (navigator.geolocation) {
+        
+        const fallbackToIP = () => {
+          fetch('https://ipapi.co/json/')
+            .then(res => res.json())
+            .then(data => {
+              if(data.latitude && data.longitude) {
+                actions.triggerSOS(type, data.latitude, data.longitude);
+              } else {
+                actions.triggerSOS(type, null, null);
+              }
+            })
+            .catch(err => {
+              console.warn("IP Geolocation also failed.");
+              actions.triggerSOS(type, null, null);
+            })
+            .finally(() => {
+              setGettingLocation(false);
+              setJustTriggered(true);
+              setTimeout(() => setJustTriggered(false), 5000);
+            });
+        };
+
+        if (navigator.geolocation && window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
           navigator.geolocation.getCurrentPosition(
             (position) => {
               actions.triggerSOS(type, position.coords.latitude, position.coords.longitude);
@@ -2041,20 +2076,14 @@
               setTimeout(() => setJustTriggered(false), 5000);
             },
             (error) => {
-              alert("Location access failed. Please ensure your browser allows location access.");
-              actions.triggerSOS(type, null, null);
-              setGettingLocation(false);
-              setJustTriggered(true);
-              setTimeout(() => setJustTriggered(false), 5000);
+              console.warn("Location access failed or denied. Falling back to IP Geolocation.");
+              fallbackToIP();
             },
             { enableHighAccuracy: true, timeout: 5000 }
           );
         } else {
-          alert("Your browser does not support GPS location tracking.");
-          actions.triggerSOS(type, null, null);
-          setGettingLocation(false);
-          setJustTriggered(true);
-          setTimeout(() => setJustTriggered(false), 5000);
+          console.warn("Browser GPS blocked over non-HTTPS. Falling back to IP Geolocation.");
+          fallbackToIP();
         }
       };
 
