@@ -883,13 +883,17 @@
       }, [pushToast]);
 
       useEffect(() => {
-        // Initial load
-        fetch("/incidents")
-          .then(r => r.json())
-          .then(applyIncidents)
-          .catch(e => console.error("Incidents load error:", e));
+        const loadInitialData = () => {
+          fetch("/incidents")
+            .then(r => r.json())
+            .then(applyIncidents)
+            .catch(e => console.error("Incidents load error:", e));
+        };
 
+        loadInitialData();
         fetchAuditLogs();
+
+        const pollInterval = setInterval(loadInitialData, 3000);
 
         // WS Connection
         let ws;
@@ -936,6 +940,7 @@
         return () => {
           if (ws) ws.close();
           clearInterval(interval);
+          clearInterval(pollInterval);
         };
       }, [fetchAuditLogs, applyIncidents]);
 
